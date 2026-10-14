@@ -13,18 +13,22 @@ export const PATTERNS = [
 const RESERVED = new Set(['VAR','RETURN','DEFINE','MEASURE','EVALUATE','ORDER','BY','START','AT','TABLE','COLUMN']);
 const KEYWORDS = new Set([...RESERVED,'TRUE','FALSE','BLANK','NOT','IN','ASC','DESC']);
 export function tokenize(source) {
-  const s=String(source ?? '').replace(/\r\n?/g,'\n'); const tokens=[]; let i=0,line=1,col=1;
-  function add(type,value){const start=i, l=line,c=col;for(const ch of value){if(ch==='\n'){line++;col=1;}else col++;}i+=value.length;tokens.push({type,value,start,end:i,line:l,col:c});}
-  while(i<s.length){const rest=s.slice(i);let m;
-    if((m=/^\s+/.exec(rest))) {add('space',m[0]);continue;}
-    if(rest.startsWith('//') || rest.startsWith('--')) {add('comment',rest.slice(0,rest.indexOf('\n')<0?rest.length:rest.indexOf('\n')));continue;}
-    if(rest.startsWith('/*')) {const end=rest.indexOf('*/',2);add(end<0?'invalid':'comment',end<0?rest:rest.slice(0,end+2));continue;}
-    if(rest[0]==='"' || rest[0]==="'"){const q=rest[0];let j=1,closed=false;while(j<rest.length){if(rest[j]===q){if(rest[j+1]===q){j+=2;continue;}j++;closed=true;break;}j++;}add(closed?(q==='"'?'string':'table'):'invalid',rest.slice(0,j));continue;}
-    if(rest[0]==='['){let j=1;while(j<rest.length){if(rest[j]===']'){if(rest[j+1]===']'){j+=2;continue;}j++;break;}j++;}add(rest[j-1]===']'?'reference':'invalid',rest.slice(0,j));continue;}
-    if((m=/^[A-Za-z_][A-Za-z0-9_]*/.exec(rest))){add('word',m[0]);continue;}
-    if((m=/^(?:>=|<=|<>|&&|\|\||==|=>)/.exec(rest))){add('operator',m[0]);continue;}
-    if((m=/^\d+(?:\.\d+)?(?:[Ee][+-]?\d+)?/.exec(rest))){add('number',m[0]);continue;}
-    add('symbol',rest[0]);
+  const s=String(source ?? '').replace(/\r\n?/g,'\n');
+  const tokens=[];let i=0,line=1,col=1;
+  const white=/\s+/y,word=/[A-Za-z_][A-Za-z0-9_]*/y,num=/\d+(?:\.\d+)?(?:[Ee][+-]?\d+)?/y;
+  function add(type,value){const start=i,l=line,c=col;for(const ch of value){if(ch==='\n'){line++;col=1;}else col++;}i+=value.length;tokens.push({type,value,start,end:i,line:l,col:c});}
+  function match(re){re.lastIndex=i;const m=re.exec(s);return m?m[0]:null;}
+  while(i<s.length){
+    let v=match(white);if(v){add('space',v);continue;}
+    if(s.startsWith('//',i)||s.startsWith('--',i)){const end=s.indexOf('\n',i);add('comment',s.slice(i,end<0?s.length:end));continue;}
+    if(s.startsWith('/*',i)){const end=s.indexOf('*/',i+2);add(end<0?'invalid':'comment',s.slice(i,end<0?s.length:end+2));continue;}
+    const c=s[i];
+    if(c==='"'||c==="'"){let j=i+1,closed=false;while(j<s.length){if(s[j]===c){if(s[j+1]===c){j+=2;continue;}j++;closed=true;break;}j++;}add(closed?(c==='"'?'string':'table'):'invalid',s.slice(i,j));continue;}
+    if(c==='['){let j=i+1,closed=false;while(j<s.length){if(s[j]===']'){if(s[j+1]===']'){j+=2;continue;}j++;closed=true;break;}j++;}add(closed?'reference':'invalid',s.slice(i,j));continue;}
+    v=match(word);if(v){add('word',v);continue;}
+    const op=s.slice(i,i+2);if(['>=','<=','<>','&&','||','==','=>'].includes(op)){add('operator',op);continue;}
+    v=match(num);if(v){add('number',v);continue;}
+    add('symbol',c);
   }
   return tokens;
 }
@@ -35,10 +39,10 @@ const TMDL = /^\s*measure\s+(?:'((?:''|[^'])+)'|([^'=\n]+))\s*=\s*(.*)$/i;
 const SIMPLE = /^([A-Za-z_][\w %.-]{0,98}?)\s*=\s*(.*)$/;
 function parseHeader(line){
   let m=DEFINITION.exec(line);
-  if(m) return {name:cleanName(m[3]),table:cleanName(m[1]||m[2]||''),bodyStart:m[4],declaration:line.slice(0,line.length-m[4].length).trimEnd()};
+  if(m && (/^\s*(?:DEFINE\s+)?MEASURE\b/i.test(line) || !/^\s/.test(line))) return {name:cleanName(m[3]),table:cleanName(m[1]||m[2]||''),bodyStart:m[4],declaration:line.slice(0,line.length-m[4].length).trimEnd()};
   m=TMDL.exec(line); if(m) return {name:cleanName(m[1]||m[2]),table:'',bodyStart:m[3],declaration:line.slice(0,line.length-m[3].length).trimEnd()};
   m=SIMPLE.exec(line);
-  if(m && !RESERVED.has(m[1].trim().split(/\s+/)[0].toUpperCase()) && !/^[ \t]+/.test(line)) return {name:m[1].trim(),table:'',bodyStart:m[2],declaration:line.slice(0,line.length-m[2].length).trimEnd()};
+  if(m && !new Set(['VAR','RETURN','DEFINE','EVALUATE','ORDER','BY','TABLE','COLUMN']).has(m[1].trim().split(/\s+/)[0].toUpperCase()) && !/^[ \t]+/.test(line)) return {name:m[1].trim(),table:'',bodyStart:m[2],declaration:line.slice(0,line.length-m[2].length).trimEnd()};
   return null;
 }
 export function parseMeasures(source){
@@ -69,9 +73,9 @@ function spaceNeeded(prev,cur){
  * Does not rewrite table names, quoted strings, literals, or bracketed identifiers. */
 function formatExpression(input){
   const all=significant(tokenize(input));if(!all.length)return '';
-  let out='',indent=0,atStart=true,prev=null;const stack=[];
-  const nl=()=>{out=out.trimEnd();if(out && !out.endsWith('\n'))out+='\n';atStart=true;};
-  const write=(v,pad=false)=>{if(atStart){out+='    '.repeat(Math.max(0,indent));atStart=false;}else if(pad&&!out.endsWith(' '))out+=' ';out+=v;};
+  let out=[],indent=0,atStart=true,prev=null;const stack=[];
+  const nl=()=>{if(out.length){const last=out.length-1;out[last]=out[last].replace(/[ \t]+$/,'');if(!out[last])out.pop();}if(out.length && out.at(-1)!=='\n')out.push('\n');atStart=true;};
+  const write=(v,pad=false)=>{if(atStart){out.push('    '.repeat(Math.max(0,indent)));atStart=false;}else if(pad&&!out.at(-1)?.endsWith(' '))out.push(' ');out.push(v);};
   const isMultilineParen=(pos)=>{
     let depth=0;
     for(let k=pos;k<all.length;k++){
@@ -110,7 +114,7 @@ function formatExpression(input){
     if(t.type==='word'&&(up==='VAR'||up==='EVALUATE'))write(' ');
     prev=t;
   }
-  return out.trim().replace(/[ \t]+\n/g,'\n');
+  return out.join('').trim().replace(/[ \t]+\n/g,'\n');
 }
 export function formatDax(input){
   const source=String(input??'');
@@ -131,13 +135,13 @@ export function formatDax(input){
   return formatExpression(source);
 }
 export function extractReferences(expr){
-  const t=significant(tokenize(expr));const results=[];
+  const t=significant(tokenize(expr));const results=[],seen=new Set();
   for(let i=0;i<t.length;i++){
     if(t[i].type!=='reference')continue;
     const before=t[i-1];const name=t[i].value.slice(1,-1).replace(/\]\]/g,']');
     const tbl=before&&(before.type==='table'||(before.type==='word'&&!KEYWORDS.has(before.value.toUpperCase())))?cleanName(before.value):null;
     const key=`${tbl??''}|${name}`.toLowerCase();
-    if(!results.some(r=>r.key===key))results.push({key,name,table:tbl,kind:tbl?'qualified (column or measure)':'unqualified (usually measure)',line:t[i].line});
+    if(!seen.has(key)){seen.add(key);results.push({key,name,table:tbl,kind:tbl?'qualified (column or measure)':'unqualified (usually measure)',line:t[i].line});}
   }
   return results;
 }
@@ -158,7 +162,7 @@ export function analyze(source,{strictNames=true}={}){
    const name=m.name;const lex=significant(tokenize(m.expression));const refs=extractReferences(m.expression);const fn=findFunctionCalls(m.expression);
    for(const [key,count] of Object.entries(fn))functions[key]=(functions[key]||0)+count;
    const links=[];
-   for(const r of refs){const resolved=measMap.get(r.name.toLowerCase());const self=resolved&&resolved.name===name;
+   for(const r of refs){const resolved=r.table?null:measMap.get(r.name.toLowerCase());const self=resolved&&resolved.name===name;
      const edge={source:name,target:r.name,table:r.table,kind:resolved?'defined measure':'unresolved; model context required',isLocal:Boolean(resolved),line:m.line+r.line-1};
      if(self)add('SELF_REFERENCE','warning',`“${name}” appears to reference itself. Confirm this is not recursion.`,name,edge.line);
      dependencies.push(edge);if(resolved)links.push(resolved.name);
@@ -176,19 +180,31 @@ export function analyze(source,{strictNames=true}={}){
    if(words.includes('FORMAT'))add('FORMAT_TEXT','info','FORMAT typically returns text; verify the intended data type and prefer model formatting when suitable.',name,m.line);
    if(words.includes('EARLIER'))add('EARLIER_REVIEW','info','EARLIER can be harder to maintain; consider a variable-based alternative where appropriate.',name,m.line);
    if((fn.IF||0)>2)add('NESTED_IF','info','Several IF calls found; consider SWITCH or intermediate variables if clearer.',name,m.line);
-   const t=lex; for(let i=0;i<t.length;i++){
+   const t=lex;const wordCounts=new Map();for(const x of t)if(x.type==='word'){const k=x.value.toLowerCase();wordCounts.set(k,(wordCounts.get(k)||0)+1);} for(let i=0;i<t.length;i++){
       if(t[i].value==='/' && !(t[i-1]?.value==='/'||t[i+1]?.value==='/')){add('DIVIDE_REVIEW','info','The / operator may require a zero-denominator decision; consider DIVIDE where appropriate.',name,m.line+t[i].line-1);break;}
    }
    for(let i=0;i<t.length-1;i++){
      if(t[i].type==='word' && t[i].value.toUpperCase()==='VAR' && t[i+1].type==='word'){
-       const variable=t[i+1].value;const uses=t.slice(i+2).filter(x=>x.type==='word'&&x.value.toLowerCase()===variable.toLowerCase());
-       if(uses.length===0)add('UNUSED_VAR','info',`Variable “${variable}” may not be referenced after its declaration.`,name,m.line+t[i].line-1);
+       const variable=t[i+1].value;const uses=wordCounts.get(variable.toLowerCase())||0;
+       if(uses<=1)add('UNUSED_VAR','info',`Variable “${variable}” may not be referenced after its declaration.`,name,m.line+t[i].line-1);
      }
    }
    if(/\bSELECTEDVALUE\s*\(/i.test(m.expression))add('SELECTED_VALUE','info','Check whether SELECTEDVALUE needs an alternate result for multiple or no selected values.',name,m.line);
  }
- const cycles=[];const visiting=new Set(),visited=new Set();function dfs(k,path){if(visiting.has(k)){const i=path.indexOf(k);cycles.push(path.slice(i).concat(k));return;}if(visited.has(k))return;visiting.add(k);for(const l of graph.get(k)||[])if(graph.has(l))dfs(l,[...path,k]);visiting.delete(k);visited.add(k);}
- for(const k of graph.keys())dfs(k,[]);
+ const cycles=[];const states=new Map();
+ for(const start of graph.keys()){
+   if(states.has(start))continue;
+   const stack=[{name:start,index:0}],active=new Map();
+   while(stack.length){
+     const frame=stack.at(-1);
+     if(!states.has(frame.name)){states.set(frame.name,1);active.set(frame.name,stack.length-1);}
+     const next=(graph.get(frame.name)||[])[frame.index++];
+     if(next===undefined){states.set(frame.name,2);active.delete(frame.name);stack.pop();continue;}
+     if(!graph.has(next))continue;
+     if(states.get(next)===1){const at=active.get(next);cycles.push(stack.slice(at).map(x=>x.name).concat(next));}
+     else if(!states.has(next))stack.push({name:next,index:0});
+   }
+ }
  for(const c of cycles)add('CYCLE','warning',`Possible circular dependency: ${c.join(' → ')}.`,c[0],1);
  const lines=String(source??'').split(/\r\n?|\n/).length;
  return {measures,dependencies,warnings,functions,cycles,stats:{measures:measures.length,references:dependencies.length,warnings:warnings.filter(x=>x.severity==='warning').length,lines}};

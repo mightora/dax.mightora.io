@@ -19,6 +19,19 @@ with sync_playwright() as playwright:
         assert page.locator("mightora-header img").first.evaluate(
             "(img) => img.complete && img.naturalWidth > 0"
         ), "Offline brand logo failed to load."
+        assert page.locator(".pattern-card").count() == 27, "Expected 27 curated examples."
+        page.locator("#patternSearch").fill("year-on-year sales growth")
+        assert page.locator(".pattern-card:visible").count() == 1, "Pattern search failed."
+        page.locator("#patternSearch").fill("")
+        page.locator("#patternCategory").select_option("Time intelligence")
+        assert page.locator(".pattern-card:visible").count() == 7, "Time-intelligence filter failed."
+        page.locator("#patternCategory").select_option("all")
+        page.locator('[data-pattern-id="safe-divide"] button').first.click()
+        example = page.locator("#daxInput").input_value()
+        assert "Gross Margin %" in example and "Total Sales =" in example
+        assert "Total Cost =" in example and "Gross Margin =" in example, (
+            "Complete example did not include transitive helper measures."
+        )
         page.locator("#daxInput").fill("Sales = IF([A] = [B], 1, 0)")
         page.locator("#formatBtn").click()
         formatted = page.locator("#formattedDax").inner_text()

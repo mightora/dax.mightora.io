@@ -9,7 +9,7 @@ test('formatter keeps literal case',()=>assert.ok(formatDax('A = "lowercase stri
 test('formatter handles nested calls',()=>assert.ok(formatDax('A = CALCULATE(SUM(Sales[Amount]))').includes('CALCULATE')));
 test('references are extracted',()=>assert.ok(extractReferences('A = [Total Sales]').some(r=>r.name==='Total Sales')));
 test('analysis identifies defined local dependencies',()=>assert.ok(analyze('A = 1\n\nB = [A]').dependencies.some(d=>d.target==='A'&&d.isLocal)));
-test('analysis warns about generic names',()=>assert.ok(analyze('Measure = SUM(Sales[Amount])').warnings.some(w=>w.code==='GENERIC_NAME')));
+test('analysis warns about generic names',()=>assert.ok(analyze('New Measure = SUM(Sales[Amount])').warnings.some(w=>w.code==='GENERIC_NAME')));
 test('analysis warns about zero denominator decisions',()=>assert.ok(analyze('Rate = 2 / 3').warnings.some(w=>w.code==='DIVIDE_REVIEW')));
 test('identical diff has no additions',()=>assert.ok(lineDiff('A = 1','A = 1').every(d=>d.type==='equal')));
 test('JSON report is model-free',()=>assert.match(makeReport('A = 1').analysis,/Static heuristics/));

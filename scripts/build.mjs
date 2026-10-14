@@ -1,6 +1,7 @@
 import {readFileSync,writeFileSync,mkdirSync,cpSync,existsSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
+import {PATTERNS,getPatternSource} from '../src/engine.js';
 const root=new URL('../',import.meta.url).pathname;
 const read=p=>readFileSync(join(root,p),'utf8');
 const dir=p=>mkdirSync(join(root,p),{recursive:true});
@@ -45,4 +46,65 @@ execFileSync('zip',['-q','-X','-j',zipFile,join(root,'build/offline/index.html')
 writeFileSync(join(root,'dist/robots.txt'),'User-agent: *\nAllow: /\nSitemap: https://dax.mightora.io/sitemap.xml\n');
 writeFileSync(join(root,'dist/sitemap.xml'),'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://dax.mightora.io/</loc></url></urlset>');
 writeFileSync(join(root,'dist/CNAME'),'dax.mightora.io\n');
+// Generate crawlable documentation directly from the same source as the offline application.
+const escapeHtml = value => String(value).replace(/[&<>"']/g,c=>({
+  '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+}[c]));
+const patternCards=PATTERNS.map(p=>[
+  '<article class="pattern-card" id="'+escapeHtml(p.id)+'">',
+  '<div class="pattern-eyebrow"><span class="cat">'+escapeHtml(p.category)+'</span><span class="pattern-level">'+escapeHtml(p.level)+'</span></div>',
+  '<h3>'+escapeHtml(p.title)+'</h3>',
+  '<p>'+escapeHtml(p.description)+'</p>',
+  '<pre class="pattern-code"><code>'+escapeHtml(p.code)+'</code></pre>',
+  '<dl class="pattern-facts">',
+  '<div class="pattern-meta-row"><dt>Model prerequisites</dt><dd>'+escapeHtml(p.model)+'</dd></div>',
+  '<div class="pattern-meta-row"><dt>Why this approach</dt><dd>'+escapeHtml(p.why)+'</dd></div>',
+  '<div class="pattern-meta-row"><dt>Watch out</dt><dd>'+escapeHtml(p.watchout)+'</dd></div>',
+  '<div class="pattern-meta-row"><dt>Suggested measure format</dt><dd>'+escapeHtml(p.format)+'</dd></div>',
+  '</dl>',
+  '<details class="pattern-details"><summary>Complete DAX including helper measures</summary>',
+  '<pre class="pattern-code"><code>'+escapeHtml(getPatternSource(p))+'</code></pre></details>',
+  '<a class="pattern-docs" href="'+escapeHtml(p.docs)+'" target="_blank" rel="noopener noreferrer">Official Microsoft reference ↗</a>',
+  '<a class="btn btn-primary btn-small" href="../#patterns">Try this in DAX Workbench ↗</a>',
+  '</article>'
+].join('')).join('\n');
+const catalogueMain=[
+ '<main>',
+ '<section class="page-shell hero" style="display:block;min-height:0;padding-bottom:28px">',
+ '<p class="eyebrow">Mightora / DAX learning library</p>',
+ '<h1>Power BI DAX calculation examples</h1>',
+ '<p class="hero-lede">27 copy-ready starter measures for Power BI semantic models, including related helper measures, model prerequisites, caveats, formatting guidance and official Microsoft references. DAX is not executed or benchmarked on this page.</p>',
+ '<p><a class="btn btn-primary" href="../">Open the interactive DAX Workbench ↗</a></p></section>',
+ '<section class="page-shell patterns-section" id="patterns"><h2>Explore all 27 patterns</h2>',
+ '<p class="pattern-intro">Examples use an illustrative Sales fact table, Date/Product/Region dimensions and optional Targets and Region Selector tables. Adapt them to your own schema, relationships, granularity and business rules. Static examples do not validate a semantic model.</p>',
+ '<div class="pattern-grid">',patternCards,'</div></section></main>'
+].join('');
+let catalogue=original.replace(/<main>[\s\S]*?<\/main>/,catalogueMain);
+if(!catalogue.includes(catalogueMain))throw Error('Could not generate static pattern page');
+catalogue=catalogue.replace(/<nav class="quick-jump-nav"[\s\S]*?<\/nav>/,'');
+catalogue=catalogue.replace('<link rel="stylesheet" href="src/styles.css">','<link rel="stylesheet" href="../src/styles.css">');
+catalogue=catalogue.replace('site-url="./"','site-url="../"');
+catalogue=catalogue.replace(/nav-links='\[[^']*\]'/, 'nav-links=\'[{"label":"Workbench","url":"../"},{"label":"All examples","url":"#patterns"},{"label":"GitHub ↗","url":"https://github.com/mightora/dax.mightora.io","ext":true},{"label":"Mightora.io ↗","url":"https://mightora.io","ext":true}]\'');
+catalogue=catalogue.replace(/<script type="module" src="src\/app.js"><\/script>/,'');
+catalogue=catalogue.replace('<title>DAX Workbench — Format, Compare & Analyse DAX | Mightora</title>','<title>27 DAX Calculation Examples with Model Notes | Mightora</title>');
+catalogue=catalogue.replace(/<meta name="description" content="[^"]*">/,'<meta name="description" content="27 practical Power BI DAX measure examples with code, helper measures, model requirements, time intelligence, KPI calculations and Microsoft references.">');
+catalogue=catalogue.replace('<link rel="canonical" href="https://dax.mightora.io/">','<link rel="canonical" href="https://dax.mightora.io/patterns/">');
+catalogue=catalogue.replace('<meta property="og:url" content="https://dax.mightora.io/">','<meta property="og:url" content="https://dax.mightora.io/patterns/">');
+catalogue=catalogue.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/,
+  '<script type="application/ld+json">'+JSON.stringify({
+    '@context':'https://schema.org','@type':'CollectionPage',
+    name:'27 DAX Calculation Examples | Mightora',
+    url:'https://dax.mightora.io/patterns/',
+    description:'DAX calculation examples with code, model prerequisites and limitations.',
+    mainEntity:{'@type':'ItemList',itemListElement:PATTERNS.map((p,i)=>({
+      '@type':'ListItem',position:i+1,name:p.title,url:'https://dax.mightora.io/patterns/#'+p.id
+    }))}
+  })+'</script>');
+dir('dist/patterns');
+writeFileSync(join(root,'dist/patterns/index.html'),catalogue);
+writeFileSync(join(root,'dist/sitemap.xml'),
+  '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+
+  '<url><loc>https://dax.mightora.io/</loc></url>'+
+  '<url><loc>https://dax.mightora.io/patterns/</loc></url></urlset>');
+
 console.log('Built online and offline distributions from the same source files.');

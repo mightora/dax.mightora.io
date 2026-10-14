@@ -20,7 +20,7 @@ jobs:
           python -m playwright install chromium
       - name: Smoke test offline HTML in a real browser
         run: python scripts/browser-smoke.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dax-workbench-static-build
           path: dist/

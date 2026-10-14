@@ -25,3 +25,9 @@ jobs:
         with: {path: dist}
       - id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify public custom-domain response
+        continue-on-error: true
+        run: |
+          echo 'Checking HTTPS and deployed app title at dax.mightora.io'
+          curl --location --fail --silent --show-error --max-time 25 https://dax.mightora.io/ | grep -q 'DAX Workbench'
+

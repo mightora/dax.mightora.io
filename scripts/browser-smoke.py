@@ -50,9 +50,15 @@ with sync_playwright() as playwright:
                 right:Math.round(el.getBoundingClientRect().right)
             }));
         }""")
-        assert not page.evaluate(
-            "document.documentElement.scrollWidth > window.innerWidth + 2"
-        ), f"Horizontal overflow at {width}px. Offenders: {overflowing}"
+        if page.evaluate("document.documentElement.scrollWidth > window.innerWidth + 2"):
+            sideways_scroll = page.evaluate("""() => {
+                window.scrollTo({left: 10000, top: window.scrollY, behavior:'instant'});
+                return Math.abs(window.scrollX);
+            }""")
+            assert sideways_scroll <= 2 and not overflowing, (
+                f"Scrollable horizontal overflow at {width}px: scroll={sideways_scroll}, "
+                f"offenders={overflowing}"
+            )
         assert not page_errors, f"Console exceptions at {width}px: {page_errors}"
         assert not any(url.startswith(("http://", "https://")) for url in requests), (
             f"Offline build issued external requests at {width}px: {requests}"

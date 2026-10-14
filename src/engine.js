@@ -1,14 +1,451 @@
 /* DAX Workbench — transparent, model-free text analysis. No eval or network. */
 export const PATTERNS = [
-  { id:'base', category:'Essentials', title:'Base measure', description:'Sum a numeric fact column. Replace model names.', code:"Total Sales =\nSUM ( 'Sales'[Sales Amount] )" },
-  { id:'safe-divide', category:'Essentials', title:'Safe percentage', description:'Protect the denominator with DIVIDE; set display format in the model.', code:"Gross Margin % =\nVAR Revenue = [Total Sales]\nVAR Cost = [Total Cost]\nRETURN\n    DIVIDE ( Revenue - Cost, Revenue )" },
-  { id:'yoy', category:'Time intelligence', title:'Year-on-year growth', description:'Requires a suitable, marked date table and a valid date relationship.', code:"Sales YoY % =\nVAR CurrentSales = [Total Sales]\nVAR PreviousSales =\n    CALCULATE (\n        [Total Sales],\n        SAMEPERIODLASTYEAR ( 'Date'[Date] )\n    )\nRETURN\n    DIVIDE ( CurrentSales - PreviousSales, PreviousSales )" },
-  { id:'ytd', category:'Time intelligence', title:'Year-to-date', description:'Uses the model date table and current filter context.', code:"Sales YTD =\nCALCULATE (\n    [Total Sales],\n    DATESYTD ( 'Date'[Date] )\n)" },
-  { id:'running', category:'Time intelligence', title:'Running total', description:'Build a cumulative amount over visible dates.', code:"Running Sales =\nVAR LastVisibleDate = MAX ( 'Date'[Date] )\nRETURN\n    CALCULATE (\n        [Total Sales],\n        FILTER ( ALLSELECTED ( 'Date'[Date] ), 'Date'[Date] <= LastVisibleDate )\n    )" },
-  { id:'share', category:'Filter context', title:'Share of selected total', description:'Calculate a proportion over a selected category context.', code:"Category Share % =\nDIVIDE (\n    [Total Sales],\n    CALCULATE ( [Total Sales], ALLSELECTED ( 'Product'[Category] ) )\n)" },
-  { id:'selected', category:'Filter context', title:'Selected value with fallback', description:'Avoid an ambiguous card value when multiple values are selected.', code:"Selected Region =\nSELECTEDVALUE ( 'Region'[Region Name], \"Multiple regions\" )" },
-  { id:'weighted', category:'Advanced', title:'Weighted average', description:'Iterate rows with explicit numerator and denominator.', code:"Weighted Price =\nVAR TotalValue = SUMX ( 'Sales', 'Sales'[Price] * 'Sales'[Quantity] )\nVAR TotalUnits = SUM ( 'Sales'[Quantity] )\nRETURN\n    DIVIDE ( TotalValue, TotalUnits )" }
+  {
+    "id": "base",
+    "category": "Core measures",
+    "level": "Beginner",
+    "title": "Total sales",
+    "description": "Sum a numeric sales amount column in the current filter context.",
+    "code": "Total Sales =\nSUM ( 'Sales'[Sales Amount] )",
+    "requires": [],
+    "model": "Sales fact table with numeric Sales Amount; one row can represent an order line.",
+    "why": "A reusable base measure should be referenced by higher-level KPIs rather than repeating SUM throughout the model.",
+    "watchout": "Check currency, returns and tax treatment; SUM ignores blank amounts.",
+    "format": "Currency",
+    "docs": "https://learn.microsoft.com/en-us/dax/sum-function-dax"
+  },
+  {
+    "id": "cost",
+    "category": "Core measures",
+    "level": "Beginner",
+    "title": "Total cost",
+    "description": "Aggregate an amount-valued cost column.",
+    "code": "Total Cost =\nSUM ( 'Sales'[Cost Amount] )",
+    "requires": [],
+    "model": "Sales[Cost Amount] stores total line cost, not per-unit cost.",
+    "why": "Keep revenue and cost in separate reusable measures.",
+    "watchout": "For per-unit cost, use SUMX over quantity and unit cost instead of SUM.",
+    "format": "Currency",
+    "docs": "https://learn.microsoft.com/en-us/dax/sum-function-dax"
+  },
+  {
+    "id": "orders",
+    "category": "Core measures",
+    "level": "Beginner",
+    "title": "Distinct order count",
+    "description": "Count orders once even when the sales table has multiple lines per order.",
+    "code": "Total Orders =\nDISTINCTCOUNT ( 'Sales'[Order ID] )",
+    "requires": [],
+    "model": "Sales[Order ID] is a stable order key; an order may have multiple sales lines.",
+    "why": "DISTINCTCOUNT avoids inflating order counts on line-grain fact tables.",
+    "watchout": "DISTINCTCOUNT includes one BLANK key if present; validate source completeness or use DISTINCTCOUNTNOBLANK.",
+    "format": "Whole number",
+    "docs": "https://learn.microsoft.com/en-us/dax/distinctcount-function-dax"
+  },
+  {
+    "id": "customers",
+    "category": "Core measures",
+    "level": "Beginner",
+    "title": "Purchasing customers",
+    "description": "Count distinct nonblank customer keys represented in the selected sales.",
+    "code": "Purchasing Customers =\nDISTINCTCOUNTNOBLANK ( 'Sales'[Customer ID] )",
+    "requires": [],
+    "model": "Sales fact rows contain Customer ID; omit customers with missing IDs.",
+    "why": "Defines a purchasing-customer metric, distinct from all customers in the dimension table.",
+    "watchout": "The measure only sees customers with sales records; it does not count customers with no purchases.",
+    "format": "Whole number",
+    "docs": "https://learn.microsoft.com/en-us/dax/distinctcountnoblank-function-dax"
+  },
+  {
+    "id": "units",
+    "category": "Core measures",
+    "level": "Beginner",
+    "title": "Units sold",
+    "description": "Sum quantity across visible sales lines.",
+    "code": "Total Units =\nSUM ( 'Sales'[Quantity] )",
+    "requires": [],
+    "model": "Sales[Quantity] represents signed units; returns may appear as negatives.",
+    "why": "A base quantity measure is useful for volume and unit-price calculations.",
+    "watchout": "Decide whether negative return quantities belong in the headline volume KPI.",
+    "format": "Whole number",
+    "docs": "https://learn.microsoft.com/en-us/dax/sum-function-dax"
+  },
+  {
+    "id": "margin",
+    "category": "Ratios & KPIs",
+    "level": "Beginner",
+    "title": "Gross margin amount",
+    "description": "Compute absolute gross margin using reusable base measures.",
+    "code": "Gross Margin =\n[Total Sales] - [Total Cost]",
+    "requires": [
+      "base",
+      "cost"
+    ],
+    "model": "Total Sales and Total Cost use the same financial scope and comparable currency.",
+    "why": "Separating margin amount from margin percentage keeps both metrics reusable.",
+    "watchout": "Do not mix cost-at-standard-price with actual sales if the business definition requires realised margin.",
+    "format": "Currency",
+    "docs": "https://learn.microsoft.com/en-us/dax/dax-operator-reference"
+  },
+  {
+    "id": "safe-divide",
+    "category": "Ratios & KPIs",
+    "level": "Beginner",
+    "title": "Gross margin percentage",
+    "description": "Use DIVIDE to handle zero or blank revenue safely.",
+    "code": "Gross Margin % =\nDIVIDE ( [Gross Margin], [Total Sales] )",
+    "requires": [
+      "margin"
+    ],
+    "model": "Total Sales and Total Cost are defined at compatible grains.",
+    "why": "DIVIDE defaults to BLANK() for a zero or blank denominator; set Percentage format in the model.",
+    "watchout": "Do not multiply by 100 when using Power BI Percentage formatting; a zero fallback would change blank semantics.",
+    "format": "Percentage, 1–2 decimals",
+    "docs": "https://learn.microsoft.com/en-us/dax/best-practices/dax-divide-function-operator"
+  },
+  {
+    "id": "aov",
+    "category": "Ratios & KPIs",
+    "level": "Beginner",
+    "title": "Average order value",
+    "description": "Divide total sales value by distinct orders, not by order lines.",
+    "code": "Average Order Value =\nDIVIDE ( [Total Sales], [Total Orders] )",
+    "requires": [
+      "base",
+      "orders"
+    ],
+    "model": "Order IDs are unique per order across the filtered dataset.",
+    "why": "Using DISTINCTCOUNT for orders avoids understating average order value when orders have several lines.",
+    "watchout": "Choose a consistent treatment of cancelled orders, refunds and orders with zero value.",
+    "format": "Currency",
+    "docs": "https://learn.microsoft.com/en-us/dax/divide-function-dax"
+  },
+  {
+    "id": "avg-unit",
+    "category": "Ratios & KPIs",
+    "level": "Beginner",
+    "title": "Average realised unit price",
+    "description": "Find average revenue per unit, weighted by units sold.",
+    "code": "Average Realised Unit Price =\nDIVIDE ( [Total Sales], [Total Units] )",
+    "requires": [
+      "base",
+      "units"
+    ],
+    "model": "Sales Amount and Quantity refer to the same transactions and units.",
+    "why": "Revenue divided by units is different from a simple average of product prices.",
+    "watchout": "Returns, discounts, freight and mixed unit types can alter its meaning.",
+    "format": "Currency per unit",
+    "docs": "https://learn.microsoft.com/en-us/dax/divide-function-dax"
+  },
+  {
+    "id": "weighted",
+    "category": "Ratios & KPIs",
+    "level": "Intermediate",
+    "title": "Weighted unit price",
+    "description": "Weight unit prices by line quantities with SUMX.",
+    "code": "Weighted Unit Price =\nVAR WeightedValue =\n    SUMX ( 'Sales', 'Sales'[Unit Price] * 'Sales'[Quantity] )\nVAR Units =\n    SUM ( 'Sales'[Quantity] )\nRETURN\n    DIVIDE ( WeightedValue, Units )",
+    "requires": [],
+    "model": "Sales fact rows have a numeric Unit Price and Quantity at compatible line grain.",
+    "why": "SUMX evaluates each row's price-times-quantity before aggregating, avoiding averaging prices equally.",
+    "watchout": "Use signed quantities consistently; rounding, exchange rates and returns may mean this differs from booked revenue divided by quantity.",
+    "format": "Currency per unit",
+    "docs": "https://learn.microsoft.com/en-us/dax/sumx-function-dax"
+  },
+  {
+    "id": "target-variance",
+    "category": "Ratios & KPIs",
+    "level": "Intermediate",
+    "title": "Sales against target (%)",
+    "description": "Measure variance relative to a sales target using a safe denominator.",
+    "code": "Sales Variance to Target % =\nDIVIDE ( [Total Sales] - [Sales Target], [Sales Target] )",
+    "requires": [
+      "base",
+      "sales-target"
+    ],
+    "model": "Targets[Sales Target] is additive and aligned to the Date/Product/Region reporting grain via appropriate relationships or allocation logic.",
+    "why": "The denominator is the target, so 0.10 means 10% above target.",
+    "watchout": "Targets kept at a different granularity often repeat or disappear under slicers; confirm propagation and aggregation.",
+    "format": "Percentage",
+    "docs": "https://learn.microsoft.com/en-us/dax/divide-function-dax"
+  },
+  {
+    "id": "sales-target",
+    "category": "Core measures",
+    "level": "Beginner",
+    "title": "Sales target",
+    "description": "Aggregate stored target amounts under the model's date and organisational filters.",
+    "code": "Sales Target =\nSUM ( 'Targets'[Sales Target] )",
+    "requires": [],
+    "model": "Targets fact table with numeric Sales Target at an agreed time and organisational grain.",
+    "why": "Centralises target calculation for plan-versus-actual measures.",
+    "watchout": "Date and other dimensions must correctly filter Targets; unaligned targets can be misleading.",
+    "format": "Currency",
+    "docs": "https://learn.microsoft.com/en-us/dax/sum-function-dax"
+  },
+  {
+    "id": "ytd",
+    "category": "Time intelligence",
+    "level": "Intermediate",
+    "title": "Year-to-date sales",
+    "description": "Aggregate sales from the start of the reporting year to the current visible date.",
+    "code": "Sales YTD =\nCALCULATE (\n    [Total Sales],\n    DATESYTD ( 'Date'[Date] )\n)",
+    "requires": [
+      "base"
+    ],
+    "model": "Continuous Date table related to Sales, marked as a date table for classic date-column time intelligence.",
+    "why": "The date table supplies a complete calendar for time-window calculations.",
+    "watchout": "This is calendar-year YTD by default; for fiscal years, adapt the DATESYTD year_end_date argument.",
+    "format": "Currency",
+    "docs": "https://learn.microsoft.com/en-us/dax/datesytd-function-dax"
+  },
+  {
+    "id": "mtd",
+    "category": "Time intelligence",
+    "level": "Intermediate",
+    "title": "Month-to-date sales",
+    "description": "Return sales from the beginning of the visible month.",
+    "code": "Sales MTD =\nCALCULATE (\n    [Total Sales],\n    DATESMTD ( 'Date'[Date] )\n)",
+    "requires": [
+      "base"
+    ],
+    "model": "Continuous, related date table used in visuals and slicers.",
+    "why": "Keeping a standalone MTD measure avoids repeating time intelligence in each report.",
+    "watchout": "The meaning depends on the current date filter context; it does not automatically mean 'through today'.",
+    "format": "Currency",
+    "docs": "https://learn.microsoft.com/en-us/dax/datesmtd-function-dax"
+  },
+  {
+    "id": "qtd",
+    "category": "Time intelligence",
+    "level": "Intermediate",
+    "title": "Quarter-to-date sales",
+    "description": "Return sales since the beginning of the current calendar quarter.",
+    "code": "Sales QTD =\nCALCULATE (\n    [Total Sales],\n    DATESQTD ( 'Date'[Date] )\n)",
+    "requires": [
+      "base"
+    ],
+    "model": "Continuous related Date table and calendar-quarter interpretation.",
+    "why": "Makes quarter-to-date reporting consistent across visuals.",
+    "watchout": "Fiscal quarter definitions may differ from calendar quarters; check your date table and requirements.",
+    "format": "Currency",
+    "docs": "https://learn.microsoft.com/en-us/dax/datesqtd-function-dax"
+  },
+  {
+    "id": "sales-py",
+    "category": "Time intelligence",
+    "level": "Intermediate",
+    "title": "Sales in previous-year period",
+    "description": "Re-evaluate sales for the matching period one year earlier.",
+    "code": "Sales Previous Year =\nCALCULATE (\n    [Total Sales],\n    SAMEPERIODLASTYEAR ( 'Date'[Date] )\n)",
+    "requires": [
+      "base"
+    ],
+    "model": "Continuous related Date table; time-based filters use Date columns.",
+    "why": "A reusable prior-year measure supports YoY difference and growth without duplicated logic.",
+    "watchout": "Missing historical dates, incomplete years and period-selection shape affect the comparison.",
+    "format": "Currency",
+    "docs": "https://learn.microsoft.com/en-us/dax/sameperiodlastyear-function-dax"
+  },
+  {
+    "id": "yoy",
+    "category": "Time intelligence",
+    "level": "Intermediate",
+    "title": "Year-on-year sales growth (%)",
+    "description": "Compare the current period with the same period last year.",
+    "code": "Sales YoY % =\nVAR PreviousSales = [Sales Previous Year]\nRETURN\n    DIVIDE ( [Total Sales] - PreviousSales, PreviousSales )",
+    "requires": [
+      "base",
+      "sales-py"
+    ],
+    "model": "Date table has a complete calendar and a valid relationship to Sales.",
+    "why": "DIVIDE returns BLANK when prior-year sales is zero or unavailable instead of an arbitrary 0% growth.",
+    "watchout": "Growth can exceed 100% or be negative; compare equivalent complete periods and test leap-day behaviour.",
+    "format": "Percentage",
+    "docs": "https://learn.microsoft.com/en-us/dax/sameperiodlastyear-function-dax"
+  },
+  {
+    "id": "rolling-12",
+    "category": "Time intelligence",
+    "level": "Advanced",
+    "title": "Trailing 12 months sales",
+    "description": "Calculate a moving 12-month window ending at the last date in context.",
+    "code": "Sales Trailing 12M =\nVAR EndDate = MAX ( 'Date'[Date] )\nRETURN\n    CALCULATE (\n        [Total Sales],\n        DATESINPERIOD ( 'Date'[Date], EndDate, -12, MONTH )\n    )",
+    "requires": [
+      "base"
+    ],
+    "model": "Continuous related Date table; Date visual context supplies the as-of date.",
+    "why": "Anchoring at MAX(Date) makes the window follow the visual or filter selection instead of hard-coding TODAY().",
+    "watchout": "A partial latest month yields a trailing period ending on that day; decide whether you need 12 complete calendar months instead.",
+    "format": "Currency",
+    "docs": "https://learn.microsoft.com/en-us/dax/datesinperiod-function-dax"
+  },
+  {
+    "id": "running",
+    "category": "Time intelligence",
+    "level": "Advanced",
+    "title": "Running sales total in selection",
+    "description": "Accumulate the selected date values up to the current point on a visual.",
+    "code": "Running Sales =\nVAR LastVisibleDate = MAX ( 'Date'[Date] )\nRETURN\n    CALCULATE (\n        [Total Sales],\n        FILTER (\n            ALLSELECTED ( 'Date'[Date] ),\n            'Date'[Date] <= LastVisibleDate\n        )\n    )",
+    "requires": [
+      "base"
+    ],
+    "model": "Visuals and filters use the related Date dimension, with a Date-level axis.",
+    "why": "ALLSELECTED retains external selection context while broadening the visual's date-point context.",
+    "watchout": "ALLSELECTED semantics vary with nested visuals and iterators; this is not an unconditional lifetime total.",
+    "format": "Currency",
+    "docs": "https://learn.microsoft.com/en-us/dax/allselected-function-dax"
+  },
+  {
+    "id": "share",
+    "category": "Filter context",
+    "level": "Intermediate",
+    "title": "Share of selected category total",
+    "description": "Show each product category's share within the selected category set.",
+    "code": "Category Share % =\nDIVIDE (\n    [Total Sales],\n    CALCULATE (\n        [Total Sales],\n        ALLSELECTED ( 'Product'[Category] )\n    )\n)",
+    "requires": [
+      "base"
+    ],
+    "model": "Product dimension related to Sales; Product[Category] is on the visual axis or matrix.",
+    "why": "ALLSELECTED can preserve page and slicer selections while calculating a visual-level comparison.",
+    "watchout": "The result depends on visual shape and hierarchy; check totals and cross-filtering before interpreting as market share.",
+    "format": "Percentage",
+    "docs": "https://learn.microsoft.com/en-us/dax/allselected-function-dax"
+  },
+  {
+    "id": "category-total",
+    "category": "Filter context",
+    "level": "Intermediate",
+    "title": "Share across all categories",
+    "description": "Remove just the category filter to calculate a category-independent denominator.",
+    "code": "Share Across Categories % =\nDIVIDE (\n    [Total Sales],\n    CALCULATE (\n        [Total Sales],\n        REMOVEFILTERS ( 'Product'[Category] )\n    )\n)",
+    "requires": [
+      "base"
+    ],
+    "model": "Product dimension has a Category column and filters Sales.",
+    "why": "REMOVEFILTERS makes the denominator independent of Category without discarding Date and other dimension filters.",
+    "watchout": "Other filters on Product (such as Product Name) still apply; this is not a universal all-products share.",
+    "format": "Percentage",
+    "docs": "https://learn.microsoft.com/en-us/dax/calculate-function-dax"
+  },
+  {
+    "id": "selected",
+    "category": "Filter context",
+    "level": "Beginner",
+    "title": "Selected region label",
+    "description": "Return a region name when precisely one distinct region is in context.",
+    "code": "Selected Region =\nSELECTEDVALUE ( 'Region'[Region Name], \"All / multiple regions\" )",
+    "requires": [],
+    "model": "Region[Region Name] is a text dimension column used by report selections.",
+    "why": "SELECTEDVALUE avoids ambiguous MAX/MIN text choices when more than one value is present.",
+    "watchout": "The fallback also appears when zero values are selected; it does not distinguish no selection from multiple selections.",
+    "format": "Text",
+    "docs": "https://learn.microsoft.com/en-us/dax/selectedvalue-function-dax"
+  },
+  {
+    "id": "active-products",
+    "category": "Filter context",
+    "level": "Intermediate",
+    "title": "Sales of active products",
+    "description": "Intersect a product status constraint with any existing report filters.",
+    "code": "Sales Active Products =\nCALCULATE (\n    [Total Sales],\n    KEEPFILTERS ( 'Product'[Status] = \"Active\" )\n)",
+    "requires": [
+      "base"
+    ],
+    "model": "Product[Status] contains an Active value, and Product filters Sales.",
+    "why": "KEEPFILTERS intersects the active-product constraint rather than replacing an existing filter on the same column.",
+    "watchout": "If an existing selection excludes Active, the result will be blank; this is intentional intersection behaviour.",
+    "format": "Currency",
+    "docs": "https://learn.microsoft.com/en-us/dax/keepfilters-function-dax"
+  },
+  {
+    "id": "rank",
+    "category": "Ranking & segmentation",
+    "level": "Advanced",
+    "title": "Product rank (dense)",
+    "description": "Rank visible products by sales without ranking the total row.",
+    "code": "Product Rank =\nIF (\n    ISINSCOPE ( 'Product'[Product Name] ),\n    RANKX (\n        ALLSELECTED ( 'Product'[Product Name] ),\n        [Total Sales],\n        ,\n        0,\n        \"Dense\"\n    )\n)",
+    "requires": [
+      "base"
+    ],
+    "model": "Product dimension filters Sales; Product Name is unique per product or replace it with a product key.",
+    "why": "Dense ranking gives consecutive ranks after ties; ISINSCOPE avoids a misleading grand-total rank.",
+    "watchout": "Duplicate product names can merge products; floating-point values may produce unexpected ties; large cardinality can be costly.",
+    "format": "Whole number",
+    "docs": "https://learn.microsoft.com/en-us/dax/rankx-function-dax"
+  },
+  {
+    "id": "shipdate",
+    "category": "Relationships & modelling",
+    "level": "Advanced",
+    "title": "Sales by shipping date",
+    "description": "Temporarily activate the Ship Date relationship in a measure.",
+    "code": "Sales by Ship Date =\nCALCULATE (\n    [Total Sales],\n    USERELATIONSHIP ( 'Sales'[Ship Date], 'Date'[Date] )\n)",
+    "requires": [
+      "base"
+    ],
+    "model": "Sales[Ship Date] → Date[Date] existing inactive relationship; another active order-date relationship may also exist.",
+    "why": "USERELATIONSHIP applies a specific existing relationship for this calculation without changing the whole model.",
+    "watchout": "Check model RLS restrictions and relationship direction; missing/incomplete shipping dates may produce blanks.",
+    "format": "Currency",
+    "docs": "https://learn.microsoft.com/en-us/dax/userelationship-function-dax"
+  },
+  {
+    "id": "treatas",
+    "category": "Relationships & modelling",
+    "level": "Advanced",
+    "title": "Disconnected region selection",
+    "description": "Apply a disconnected selector's values as filters on a region dimension.",
+    "code": "Sales Selected Regions =\nCALCULATE (\n    [Total Sales],\n    TREATAS (\n        VALUES ( 'Region Selector'[Region Name] ),\n        'Region'[Region Name]\n    )\n)",
+    "requires": [
+      "base"
+    ],
+    "model": "Region Selector disconnected from the model; Region table related to Sales; both columns contain compatible names.",
+    "why": "TREATAS creates filter propagation from a disconnected selection where no physical relationship exists.",
+    "watchout": "Unmatched selector values are ignored. Prefer a real relationship where a suitable model relationship is possible.",
+    "format": "Currency",
+    "docs": "https://learn.microsoft.com/en-us/dax/treatas-function-dax"
+  },
+  {
+    "id": "zero",
+    "category": "Relationships & modelling",
+    "level": "Beginner",
+    "title": "Show zero instead of blank",
+    "description": "Explicitly show 0 for a blank result when reporting needs it.",
+    "code": "Sales Display Zero =\nCOALESCE ( [Total Sales], 0 )",
+    "requires": [
+      "base"
+    ],
+    "model": "Total Sales already defined as a numeric measure.",
+    "why": "COALESCE converts BLANK to zero for display-friendly KPIs.",
+    "watchout": "Replacing missing data with zero can be misleading and can cause visuals to show more categories; only use when justified.",
+    "format": "Currency",
+    "docs": "https://learn.microsoft.com/en-us/dax/coalesce-function-dax"
+  }
 ];
+
+/** Build a copy-ready source including recursively required base measures.
+ * The examples still require the documented semantic-model tables and relationships. */
+export function getPatternSource(pattern, { includeHelpers = true } = {}) {
+  if (!pattern || typeof pattern.code !== 'string') return '';
+  if (!includeHelpers) return pattern.code;
+  const visited = new Set(), active = new Set(), snippets = [];
+  const byId = new Map(PATTERNS.map(p => [p.id,p]));
+  function add(entry) {
+    if (visited.has(entry.id)) return;
+    if (active.has(entry.id)) throw Error('Circular pattern prerequisites: ' + entry.id);
+    active.add(entry.id);
+    for (const id of entry.requires || []) {
+      const dependency=byId.get(id);
+      if (!dependency) throw Error('Unknown prerequisite pattern: ' + id);
+      add(dependency);
+    }
+    active.delete(entry.id);
+    visited.add(entry.id);
+    snippets.push(entry.code.trim());
+  }
+  add(pattern);
+  return snippets.join('\n\n');
+}
 
 const RESERVED = new Set(['VAR','RETURN','DEFINE','MEASURE','EVALUATE','ORDER','BY','START','AT','TABLE','COLUMN']);
 const KEYWORDS = new Set([...RESERVED,'TRUE','FALSE','BLANK','NOT','IN','ASC','DESC']);

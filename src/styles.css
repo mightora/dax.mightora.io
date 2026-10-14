@@ -88,6 +88,6 @@ mightora-header:not(:defined){background:#0c2638;color:white;min-height:64px;pos
     white-space:pre-wrap;
     overflow-wrap:anywhere;
   }
-  .quick-jump-nav{max-width:100vw;overflow-x:auto;}
+  .quick-jump-nav{display:none;}
 }
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition-duration:.01ms!important;animation-duration:.01ms!important}}

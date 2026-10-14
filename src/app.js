@@ -37,6 +37,7 @@ function buildPatterns(){
  for(const p of PATTERNS){
    const article=document.createElement('article');article.className='pattern-card';
    article.dataset.category=p.category;
+   article.dataset.patternId=p.id;
    article.dataset.search=(p.title+' '+p.description+' '+p.category+' '+p.level+' '+p.code+' '+p.model+' '+p.why+' '+p.watchout).toLocaleLowerCase();
    const eyebrow=document.createElement('div');eyebrow.className='pattern-eyebrow';
    const cat=document.createElement('span');cat.className='cat';cat.textContent=p.category.toUpperCase();

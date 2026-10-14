@@ -28,7 +28,26 @@ test('helper-inclusive examples are complete, ordered, nonduplicated and parse c
   const names=measures.map(m=>m.name);
   assert.equal(names.length,new Set(names).size,p.id+' has duplicated helper definitions');
   assert.equal(measures.at(-1).name,parseMeasures(p.code)[0].name,p.id+' target measure not last');
-  assert.equal(measures.length,p.requires.length+1,p.id+' missing a prerequisite or nested helper');
+  const byId=new Map(PATTERNS.map(x=>[x.id,x]));
+  const expected=new Set();
+  function collect(id){
+   if(expected.has(id))return;
+   const required=byId.get(id);
+   assert.ok(required,p.id+' references unknown helper '+id);
+   for(const dependency of required.requires)collect(dependency);
+   expected.add(id);
+  }
+  collect(p.id);
+  assert.equal(measures.length,expected.size,p.id+' has missing or extra transitive prerequisites');
+  const declared=new Set();
+  for(const entry of measures){
+   const matching=PATTERNS.find(x=>parseMeasures(x.code)[0].name===entry.name);
+   assert.ok(matching,p.id+' has undocumented helper '+entry.name);
+   for(const dependency of matching.requires||[]){
+    assert.ok(declared.has(parseMeasures(byId.get(dependency).code)[0].name),p.id+' helper ordering invalid: '+dependency);
+   }
+   declared.add(entry.name);
+  }
   assert.equal(getPatternSource(p,{includeHelpers:false}),p.code);
   assert.ok(!tokenize(full).some(t=>t.type==='invalid'),p.id+' bundle contains invalid token');
  }

@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {PATTERNS,tokenize,parseMeasures,formatDax,extractReferences,analyze,lineDiff,makeReport} from '../src/engine.js';
-test('calculation library includes eight patterns',()=>assert.equal(PATTERNS.length,8));
+test('calculation library contains 27 curated patterns',()=>assert.equal(PATTERNS.length,27));
 test('tokenizer preserves quoted text',()=>assert.ok(tokenize('"CALCULATE"').some(x=>x.type==='string')));
 test('tokenizer recognizes comments',()=>assert.ok(tokenize('// SELECTEDVALUE').some(x=>x.type==='comment')));
 test('simple measure is parsed',()=>assert.equal(parseMeasures('Total Sales = SUM ( Sales[Amount] )')[0].name,'Total Sales'));

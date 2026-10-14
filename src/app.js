@@ -1,4 +1,4 @@
-import {PATTERNS, analyze, parseMeasures, tokenize, formatDax, lineDiff, makeReport} from './engine.js';
+import {PATTERNS, getPatternSource, analyze, parseMeasures, tokenize, formatDax, lineDiff, makeReport} from './engine.js';
 const el=id=>document.getElementById(id);
 const state={source:'',result:null,timer:null,lastToast:null};
 const setText=(id,text)=>{el(id).textContent=String(text)};
@@ -18,8 +18,85 @@ function runAnalysis({notify=false}={}){
  if(notify)toast('Formatting and static analysis complete.');
 }
 function scheduleAnalysis(){clearTimeout(state.timer);state.timer=setTimeout(()=>runAnalysis(),300);}
-function initialExample(){const p=PATTERNS.find(x=>x.id==='safe-divide');el('daxInput').value=`Total Sales = SUM ( 'Sales'[Sales Amount] )\n\nTotal Cost = SUM ( 'Sales'[Cost Amount] )\n\n${p.code}`;runAnalysis();}
-function buildPatterns(){const categories=[...new Set(PATTERNS.map(p=>p.category))];const sel=el('patternCategory');for(const c of categories){const o=document.createElement('option');o.value=c;o.textContent=c;sel.append(o);}const list=el('patternList');for(const p of PATTERNS){const article=document.createElement('article');article.className='pattern-card';article.dataset.category=p.category;const cat=document.createElement('span');cat.className='cat';cat.textContent=p.category.toUpperCase();const h=document.createElement('h3');h.textContent=p.title;const d=document.createElement('p');d.textContent=p.description;const b=document.createElement('button');b.className='btn btn-quiet btn-small';b.textContent='Use pattern ↗';b.addEventListener('click',()=>{el('daxInput').value=p.code;runAnalysis();document.querySelector('#workbench').scrollIntoView({behavior:'smooth'});toast(`Loaded ${p.title}. Replace sample model names.`);});article.append(cat,h,d,b);list.append(article);}sel.addEventListener('change',()=>{for(const item of list.children)item.hidden=sel.value!=='all'&&sel.value!==item.dataset.category;});}
+function initialExample(){
+ const p=PATTERNS.find(x=>x.id==='safe-divide');
+ el('daxInput').value=getPatternSource(p);
+ runAnalysis();
+}
+function buildPatterns(){
+ const categories=[...new Set(PATTERNS.map(p=>p.category))];
+ const sel=el('patternCategory');
+ for(const c of categories){const o=document.createElement('option');o.value=c;o.textContent=c;sel.append(o);}
+ const list=el('patternList');
+ const byId=new Map(PATTERNS.map(p=>[p.id,p]));
+ function meta(label,value){
+   const row=document.createElement('div');row.className='pattern-meta-row';
+   const dt=document.createElement('dt'),dd=document.createElement('dd');
+   dt.textContent=label;dd.textContent=value;row.append(dt,dd);return row;
+ }
+ for(const p of PATTERNS){
+   const article=document.createElement('article');article.className='pattern-card';
+   article.dataset.category=p.category;
+   article.dataset.search=(p.title+' '+p.description+' '+p.category+' '+p.level+' '+p.code+' '+p.model+' '+p.why+' '+p.watchout).toLocaleLowerCase();
+   const eyebrow=document.createElement('div');eyebrow.className='pattern-eyebrow';
+   const cat=document.createElement('span');cat.className='cat';cat.textContent=p.category.toUpperCase();
+   const level=document.createElement('span');level.className='pattern-level';level.textContent=p.level;
+   eyebrow.append(cat,level);
+   const h=document.createElement('h3');h.textContent=p.title;
+   const d=document.createElement('p');d.textContent=p.description;
+   const preview=document.createElement('pre');preview.className='pattern-code';
+   const sample=document.createElement('code');sample.textContent=p.code;preview.append(sample);
+   const details=document.createElement('details');details.className='pattern-details';
+   const summary=document.createElement('summary');summary.textContent='Model setup, reasoning & caveats';
+   const facts=document.createElement('dl');facts.className='pattern-facts';
+   facts.append(
+     meta('Required model',p.model),
+     meta('Why this approach',p.why),
+     meta('Watch out',p.watchout),
+     meta('Model format',p.format)
+   );
+   if(p.requires?.length){const helpers=p.requires.map(id=>byId.get(id)?.title||id);facts.append(meta('Related measures',helpers.join(' · ')+' (included with full example)'));}
+   const docs=document.createElement('a');
+   docs.className='pattern-docs';docs.href=p.docs;docs.target='_blank';docs.rel='noopener noreferrer';docs.textContent='Microsoft DAX reference ↗';
+   details.append(summary,facts,docs);
+   const actions=document.createElement('div');actions.className='pattern-actions';
+   const load=document.createElement('button');load.type='button';load.className='btn btn-primary btn-small';
+   load.textContent='Load complete example';
+   load.setAttribute('aria-label','Load '+p.title+' with required helper measures');
+   load.addEventListener('click',()=>{
+     el('daxInput').value=getPatternSource(p);
+     runAnalysis();
+     document.getElementById('workbench').scrollIntoView({behavior:'smooth'});
+     toast('Loaded '+p.title+' with '+(getPatternSource(p).split('\n\n').length-1)+' prerequisite measure(s). Adapt table names to your model.');
+   });
+   const copyMeasure=document.createElement('button');copyMeasure.type='button';copyMeasure.className='btn btn-quiet btn-small';
+   copyMeasure.textContent='Copy measure';
+   copyMeasure.setAttribute('aria-label','Copy only the '+p.title+' measure');
+   copyMeasure.addEventListener('click',()=>copy(p.code));
+   const copyAll=document.createElement('button');copyAll.type='button';copyAll.className='btn btn-quiet btn-small';
+   copyAll.textContent='Copy with helpers';
+   copyAll.setAttribute('aria-label','Copy '+p.title+' including helper measures');
+   copyAll.addEventListener('click',()=>copy(getPatternSource(p)));
+   actions.append(load,copyMeasure,copyAll);
+   article.append(eyebrow,h,d,preview,details,actions);
+   list.append(article);
+ }
+ const search=el('patternSearch');
+ const resultCount=el('patternResultCount');
+ function update(){
+   const q=search.value.trim().toLocaleLowerCase();
+   let shown=0;
+   for(const item of list.children){
+     const match=(sel.value==='all'||sel.value===item.dataset.category)&&(!q||item.dataset.search.includes(q));
+     item.hidden=!match;
+     if(match)shown++;
+   }
+   resultCount.textContent=shown+' of '+PATTERNS.length+' examples shown';
+ }
+ sel.addEventListener('change',update);
+ search.addEventListener('input',update);
+ update();
+}
 function renderDiff(){const diff=lineDiff(el('beforeInput').value,el('afterInput').value,{ignoreWhitespace:el('ignoreWhitespace').checked});const root=el('diffResults');root.replaceChildren();let added=0,removed=0;
 const fragment=document.createDocumentFragment();let rendered=0;for(const d of diff){if(d.type==='added')added++;if(d.type==='removed')removed++;if(rendered++>=1200)continue;const row=document.createElement('div');row.className=`diff-row ${d.type}`;for(const str of [d.old??'',d.new??'',d.type==='added'?'+':d.type==='removed'?'-':' ',d.text]){const cell=document.createElement('span');cell.className=row.childElementCount<2?'lineNo':row.childElementCount===2?'sig':'lineTxt';cell.textContent=str;row.append(cell);}fragment.append(row);}root.append(fragment);if(diff.length>1200){const note=document.createElement('p');note.className='footnote';note.textContent=`Showing first 1,200 of ${diff.length} diff rows to keep the browser responsive.`;root.append(note);}
 setText('diffSummary',`+${added} added / −${removed} removed · ${el('ignoreWhitespace').checked?'ignoring':'including'} whitespace`);}

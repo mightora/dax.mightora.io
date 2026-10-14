@@ -33,6 +33,7 @@ html=html.replace(/<section class="page-shell badges"[\s\S]*?<\/section>/,'<sect
 html=html.replace(/<a href="downloads\/dax-workbench-offline.html"[^>]*>[\s\S]*?<\/a>/,'<span class="btn btn-quiet">You are using the offline HTML</span>');
 html=html.replace(/<a href="downloads\/dax-workbench-offline.zip"[^>]*>[\s\S]*?<\/a>/,'<span class="btn btn-primary">ZIP available from the online edition</span>');
 html=html.replace('<meta name="theme-color"',`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; font-src data:; object-src 'none'; media-src 'none'; form-action 'none'; base-uri 'none'">\n<meta name="theme-color"`);
+html=html.replace(/<p class="pattern-index-link">[\\s\\S]*?<\\/p>/,'');
 html=html.replace('</head>',offlineCss+'</head>');
 html=html.replace('</body>','<script>'+header+engine+app+'</script></body>');
 writeFileSync(join(root,'dist/downloads/dax-workbench-offline.html'),html);

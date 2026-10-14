@@ -4,8 +4,10 @@ mightora-author.author-wrap{
   display:block;
   width:100%;
   margin:0;
+  background-color:#102b3d;
 }
 mightora-author.author-wrap .author-section-overlay{
+  background:rgba(0,0,0,.46);
   padding:clamp(2.75rem,5vw,4.5rem) clamp(1.25rem,4vw,3rem);
 }
 mightora-author.author-wrap .author-section-inner{
@@ -24,13 +26,21 @@ mightora-author.author-wrap .author-text{
   flex:1;
   min-width:0;
 }
+mightora-author.author-wrap .author-heading{
+  color:#fff;
+}
 mightora-author.author-wrap .author-bio{
   max-width:67ch;
+  color:rgba(255,255,255,.91);
+}
+mightora-author.author-wrap .author-bio strong{
+  color:#fff;
 }
 mightora-author.author-wrap .author-links{
   row-gap:.625rem;
 }
 mightora-author.author-wrap .author-link{
+  color:#fff;
   display:inline-flex;
   align-items:center;
   min-height:40px;

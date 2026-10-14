@@ -8,7 +8,8 @@ A free open-source static web app to **format, compare and review Power BI DAX e
 - Conservative whitespace formatting and DAX function casing, without changing quoted table names, strings or bracketed identifiers.
 - Compare two inputs with a safe, text-only line diff, optionally ignoring whitespace.
 - Name checks, local pasted measure reference matching, candidate dependencies, delimiter checks and optional maintainability guidance.
-- Eight copy-ready calculation templates, with explicit model-dependent assumptions.
+- 27 searchable, reviewed DAX calculation patterns across six categories. Each includes the measure, recursively included helper measures, semantic-model requirements, business caveats, suggested display format and an official Microsoft reference.
+- Static, search-indexable calculation reference generated from the identical library at [`/patterns/`](https://dax.mightora.io/patterns/).
 - Export formatted DAX and a machine-readable static review JSON.
 - Live request-domain summary and instructions to audit traffic in browser Developer Tools.
 - Fully standalone offline HTML and ZIP, generated from the same `src/` files as the hosted app.
@@ -30,7 +31,7 @@ Publish this source in a public GitHub repository. Enable **Settings â†’ Pages â
 
 Build and CodeQL workflow badges are wired to `mightora/dax.mightora.io`; they are **not verified** until a public repository and successful workflows exist. The UI links to evidence; badge images themselves must not be treated as a security assurance.
 
-The offline builder embeds the full official Mightora logo if `assets/mightora-logo.png` exists. If that asset is absent, a brand-coloured *offline wordmark fallback* is embedded. Fetch the official full logo from the official Mightora design-system instructions before shipping the final branded offline build. The online header always references the prescribed asset URL.
+The offline builder embeds the official full Mightora logo from `assets/mightora-logo.png`, which is required for a successful build. The online header uses the prescribed logo URL and shared web components.
 
 ## Privacy & limitations
 
@@ -45,3 +46,17 @@ Source in `src/` is deliberately dependency-free. Add tests in `tests/` for bug 
 ## Licence
 
 MIT, see [LICENSE](LICENSE).
+## DAX example-library quality standard
+
+The pattern catalogue is maintained in `src/engine.js` and automatically appears in:
+- the interactive filterable **Calculation examples** cards;
+- the source-complete, directly usable **offline HTML**;
+- the static, crawlable **`/patterns/` reference page**, created at build time.
+
+Every pattern requires a unique ID, one named target measure, an appropriate category and skill level, stated semantic-model prerequisites, a business explanation, an explicit warning about context or limitations, a proposed display format, and a supporting Microsoft Learn URL. Patterns with measure dependencies declare `requires` IDs; the workbench includes transitive prerequisites once, in dependency order, when loading a complete example.
+
+Example schema names are **illustrative**: `'Sales'[Sales Amount]`, `'Sales'[Quantity]`, `'Date'[Date]`, `'Product'[Category]`, `'Region'[Region Name]`, `'Targets'[Sales Target]` and optional disconnected `'Region Selector'[Region Name]`. The consumer must adapt these names and model relationships. The 27 examples are static reference patterns, **not model-executed or benchmark-verified calculations**.
+
+Run `npm run check` before contributing. The pattern tests check content, syntax-token boundaries, helper ordering and formatting repeatability; Playwright smoke tests check live example filtering and helper loading in the offline build at multiple screen widths. The test suite cannot establish the semantic correctness of an example against an unknown Power BI model.
+
+Further guidance: [DAX syntax](https://learn.microsoft.com/dax/dax-syntax-reference), [DIVIDE recommendations](https://learn.microsoft.com/dax/best-practices/dax-divide-function-operator), [time intelligence](https://learn.microsoft.com/dax/time-intelligence-functions-dax), [CALCULATE and filter context](https://learn.microsoft.com/dax/calculate-function-dax).

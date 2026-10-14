@@ -39,9 +39,20 @@ with sync_playwright() as playwright:
             menu = page.locator("mightora-header .offline-menu")
             menu.click()
             assert menu.get_attribute("aria-expanded") == "true"
+        overflowing = page.evaluate("""() => {
+            const max=innerWidth+2;
+            return [...document.querySelectorAll('body *')].filter(el => {
+                const rect=el.getBoundingClientRect();
+                return rect.width && rect.right>max && getComputedStyle(el).position!=='fixed';
+            }).slice(0,12).map(el=>({
+                tag:el.tagName, cls:String(el.className).slice(0,75),
+                width:Math.round(el.getBoundingClientRect().width),
+                right:Math.round(el.getBoundingClientRect().right)
+            }));
+        }""")
         assert not page.evaluate(
             "document.documentElement.scrollWidth > window.innerWidth + 2"
-        ), f"Horizontal overflow at {width}px."
+        ), f"Horizontal overflow at {width}px. Offenders: {overflowing}"
         assert not page_errors, f"Console exceptions at {width}px: {page_errors}"
         assert not any(url.startswith(("http://", "https://")) for url in requests), (
             f"Offline build issued external requests at {width}px: {requests}"

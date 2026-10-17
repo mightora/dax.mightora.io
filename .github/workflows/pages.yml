@@ -30,6 +30,10 @@ jobs:
       - name: Smoke test offline HTML in a real browser
         run: python scripts/browser-smoke.py
       - uses: actions/configure-pages@v5
+      - name: Bundle shared Mightora footer
+        uses: mightora/shared-ui/.github/actions/sync-footer@main
+        with:
+          output-directory: dist
       - uses: actions/upload-pages-artifact@v3
         with: {path: dist}
       - id: deployment

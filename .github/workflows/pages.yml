@@ -29,7 +29,7 @@ jobs:
           python -m playwright install chromium
       - name: Smoke test offline HTML in a real browser
         run: python scripts/browser-smoke.py
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
       - name: Bundle shared Mightora footer
         uses: mightora/shared-ui/.github/actions/sync-footer@main
         with:

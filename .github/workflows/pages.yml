@@ -34,7 +34,7 @@ jobs:
         uses: mightora/shared-ui/.github/actions/sync-footer@main
         with:
           output-directory: dist
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with: {path: dist}
       - id: deployment
         uses: actions/deploy-pages@v4
